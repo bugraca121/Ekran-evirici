@@ -1,1 +1,1 @@
-# Ekran-evirici
+# Ekran-Çevirici
