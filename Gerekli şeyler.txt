@@ -1,0 +1,7 @@
+Pillow
+pytesseract
+deep-translator
+keyboard
+tk
+------------
+Nasıl kurulacağına dair bir video yakında gelecektir.

@@ -1,0 +1,16 @@
+# 🎮 Anlık Oyun Çevirmeni (Screen Translator)
+
+Bu proje, oyun oynarken ekrandaki İngilizce altyazıları anlık olarak yakalar (OCR), Türkçeye çevirir ve oyunun üzerine şeffaf bir pencere olarak yansıtır.
+
+**Özellikler:**
+* 🚀 **Anlık Çeviri:** Ekrandan görüntüyü alır ve anında çevirir.
+* 👻 **Hayalet Modu:** Çeviri yaparken pencere ekran görüntüsüne girmez (Ghosting yapmaz).
+* 🎛️ **Komuta Merkezi:** Okuma alanı (Göz) ve Çeviri alanı (Ağız) birbirinden bağımsızdır.
+* ⌨️ **Klavye Kısayolları:** Oyundan çıkmadan her şeyi kontrol edebilirsiniz.
+
+## 🛠️ Kurulum
+
+1. **Python'u Kurun:** Bilgisayarınızda Python yüklü olmalıdır.
+2. **Kütüphaneleri Yükleyin:**
+   ```bash
+   pip install -r requirements.txt

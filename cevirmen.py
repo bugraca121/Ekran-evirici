@@ -1,0 +1,219 @@
+import tkinter as tk
+from PIL import ImageGrab, Image, ImageOps
+import pytesseract
+from deep_translator import GoogleTranslator
+import threading
+import time
+import os
+import keyboard
+
+# --- AYARLAR ---
+tesseract_yolu = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+if os.path.exists(tesseract_yolu):
+    pytesseract.pytesseract.tesseract_cmd = tesseract_yolu
+
+class HareketliPencere:
+    def __init__(self, title, color, x, y, w, h, is_reader=False):
+        self.window = tk.Toplevel()
+        self.window.title(title)
+        self.window.geometry(f"{w}x{h}+{x}+{y}")
+        self.window.overrideredirect(True)
+        self.window.attributes("-topmost", True)
+        self.window.attributes("-transparentcolor", "black")
+        self.window.configure(bg='black')
+        
+        self.is_reader = is_reader
+        self.default_color = color
+        self.current_color = color
+        self.font_size = 12 # Varsayılan font boyutu
+
+        # İçerik
+        self.frame = tk.Frame(self.window, bg='black')
+        self.frame.pack(expand=True, fill='both')
+        
+        self.label = tk.Label(self.frame, text=title, font=("Arial", self.font_size, "bold"),
+                              fg=color, bg='black', wraplength=w-10)
+        self.label.pack(expand=True, fill='both', padx=5, pady=5)
+
+        # Tutamaç
+        self.grip = tk.Label(self.frame, text="↘", bg=color, fg="black", cursor="sizing")
+        self.grip.place(relx=1.0, rely=1.0, x=-15, y=-15, width=15, height=15)
+        self.grip.place_forget() 
+
+        # Olaylar
+        self.label.bind('<Button-1>', self.tasima_basla)
+        self.label.bind('<B1-Motion>', self.tasi)
+        self.grip.bind('<Button-1>', self.boyut_basla)
+        self.grip.bind('<B1-Motion>', self.boyutlandir)
+        self.start_x = 0; self.start_y = 0
+
+    def guncelle_font(self, miktar):
+        # Font boyutunu artır/azalt
+        self.font_size += miktar
+        if self.font_size < 8: self.font_size = 8 # Çok küçülmesin
+        self.label.config(font=("Arial", self.font_size, "bold"))
+
+    def renk_degistir(self, yeni_renk):
+        # Eğer okuyucu penceresi ise rengi değiştirme (O hep kırmızı kalsın karışmasın)
+        if not self.is_reader:
+            self.current_color = yeni_renk
+            self.label.config(fg=yeni_renk)
+            # Ayar modundaysak tutamaç rengini de güncelle
+            if self.frame.cget('bg') != 'black':
+                self.grip.config(bg=yeni_renk)
+
+    def ayar_moduna_gec(self, aktif):
+        if aktif:
+            self.frame.configure(bg='#333333')
+            self.label.configure(bg='#333333')
+            self.grip.place(relx=1.0, rely=1.0, x=-15, y=-15, width=15, height=15)
+            # Tutamaç rengini güncelle
+            self.grip.config(bg=self.current_color if not self.is_reader else "#FF0000")
+            
+            if self.is_reader:
+                self.label.config(text=f"[GÖZ]\nFont: {self.font_size}")
+            else:
+                self.label.config(text="[ÇEVİRİ]\nKonumu ayarla")
+        else:
+            self.frame.configure(bg='black')
+            self.label.configure(bg='black')
+            self.grip.place_forget()
+            if self.is_reader: self.label.config(text="")
+            else: self.label.config(text="...")
+
+    def tasima_basla(self, event):
+        self.start_x = event.x
+        self.start_y = event.y
+
+    def tasi(self, event):
+        if self.frame.cget('bg') != 'black':
+            x = self.window.winfo_x() + (event.x - self.start_x)
+            y = self.window.winfo_y() + (event.y - self.start_y)
+            self.window.geometry(f"+{x}+{y}")
+
+    def boyut_basla(self, event):
+        self.start_x = event.x_root
+        self.start_y = event.y_root
+        self.start_w = self.window.winfo_width()
+        self.start_h = self.window.winfo_height()
+
+    def boyutlandir(self, event):
+        dx = event.x_root - self.start_x
+        dy = event.y_root - self.start_y
+        new_w = max(50, self.start_w + dx)
+        new_h = max(30, self.start_h + dy)
+        self.window.geometry(f"{new_w}x{new_h}")
+        self.label.config(wraplength=new_w-10)
+
+class AnaUygulama:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+
+        self.pencere_goz = HareketliPencere("GÖZ", "#FF0000", 100, 500, 600, 60, is_reader=True)
+        self.pencere_agiz = HareketliPencere("ÇEVİRİ", "#FFFF00", 100, 100, 600, 80, is_reader=False)
+
+        self.translator = GoogleTranslator(source='auto', target='tr')
+        self.ayar_modu = False
+        self.gizli_mod = False
+        
+        # --- RENK LİSTESİ ---
+        self.renkler = ["#FFFF00", "#00FF00", "#FFFFFF", "#00FFFF", "#FF00FF"] # Sarı, Yeşil, Beyaz, Turkuaz, Magenta
+        self.secili_renk_index = 0
+
+        # --- KISAYOLLAR ---
+        keyboard.add_hotkey('insert', self.mod_degistir)       # Ayar Modu
+        keyboard.add_hotkey('page up', lambda: self.font_degistir(2))   # Font Büyüt
+        keyboard.add_hotkey('page down', lambda: self.font_degistir(-2)) # Font Küçült
+        keyboard.add_hotkey('home', self.renk_degistir)        # Renk Değiştir
+        keyboard.add_hotkey('end', self.gizle_goster)          # Gizle/Göster
+
+        self.mod_degistir(force_mode=False)
+
+        self.thread = threading.Thread(target=self.cevir_dongusu)
+        self.thread.daemon = True
+        self.thread.start()
+        
+        self.root.mainloop()
+
+    def mod_degistir(self, force_mode=None):
+        if force_mode is not None: self.ayar_modu = force_mode
+        else: self.ayar_modu = not self.ayar_modu
+            
+        self.pencere_goz.ayar_moduna_gec(self.ayar_modu)
+        self.pencere_agiz.ayar_moduna_gec(self.ayar_modu)
+        print(f"MOD: {'AYAR' if self.ayar_modu else 'OYUN'}")
+
+    def font_degistir(self, miktar):
+        # Her iki pencerenin de fontunu büyüt/küçült
+        self.pencere_agiz.guncelle_font(miktar)
+        # Göz penceresi sadece bilgi veriyor, onu değiştirmesek de olur ama orantılı olsun
+        self.pencere_goz.guncelle_font(miktar)
+        print(f"Font değişti: {miktar}")
+
+    def renk_degistir(self):
+        self.secili_renk_index = (self.secili_renk_index + 1) % len(self.renkler)
+        yeni_renk = self.renkler[self.secili_renk_index]
+        self.pencere_agiz.renk_degistir(yeni_renk)
+        print(f"Renk değişti: {yeni_renk}")
+
+    def gizle_goster(self):
+        self.gizli_mod = not self.gizli_mod
+        if self.gizli_mod:
+            self.pencere_goz.window.withdraw()
+            self.pencere_agiz.window.withdraw()
+        else:
+            self.pencere_goz.window.deiconify()
+            self.pencere_agiz.window.deiconify()
+
+    def goruntuyu_isles(self, image):
+        w, h = image.size
+        image = image.resize((w * 2, h * 2), Image.Resampling.LANCZOS)
+        image = image.convert('L')
+        image = ImageOps.invert(image)
+        image = image.point(lambda x: 0 if x < 128 else 255, '1')
+        return image
+
+    def cevir_dongusu(self):
+        while True:
+            try:
+                # Ayar modu, Gizli mod veya program kapalıysa bekle
+                if self.ayar_modu or self.gizli_mod:
+                    time.sleep(0.5)
+                    continue
+
+                # 1. Konum al
+                win = self.pencere_goz.window
+                x = win.winfo_rootx()
+                y = win.winfo_rooty()
+                w = win.winfo_width()
+                h = win.winfo_height()
+                bbox = (x, y, x + w, y + h)
+
+                # 2. Çek (Agız'ı gizleyip çekmeye gerek yok eğer üst üste değillerse)
+                # Çakışma riskine karşı "Ağız"ı anlık gizleyebilirsin ama 
+                # performans için şimdilik böyle bırakıyorum.
+                self.pencere_agiz.window.withdraw()
+                image = ImageGrab.grab(bbox=bbox)
+                self.pencere_agiz.window.deiconify()
+
+                # 3. İşle
+                processed = self.goruntuyu_isles(image)
+                text = pytesseract.image_to_string(processed, lang='eng', config='--psm 6')
+                text = text.strip().replace("\n", " ").replace("|", "")
+
+                if len(text) > 2:
+                    try:
+                        ceviri = self.translator.translate(text)
+                        self.pencere_agiz.label.config(text=ceviri)
+                    except:
+                        pass
+                
+                time.sleep(0.1)
+
+            except Exception as e:
+                print(f"Hata: {e}")
+                time.sleep(1)
+
+if __name__ == "__main__":
+    AnaUygulama()
