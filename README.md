@@ -1,1 +1,0 @@
-# Ekran-Çevirici
